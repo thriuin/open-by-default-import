@@ -1,0 +1,7 @@
+*.json
+*.jl
+*.ini
+/JSON/
+/Examples/
+/.idea
+!schemas/organizations.json
