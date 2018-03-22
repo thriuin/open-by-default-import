@@ -42,7 +42,7 @@ oc_resource_formats, oc_resource_types, oc_audience_types = load_oc_resource_for
 def convert(fields, filename):
     # Blank Dataset
     obd_ds = {'collection': 'publication',
-              'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'http://obd.open.canada.ca/' + filename))}
+              'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'http://obd.open.canada.ca/' + os.path.splitext(filename)[0]))}
 
     release_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if not fields.get('date_published'):

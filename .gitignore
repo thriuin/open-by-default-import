@@ -5,3 +5,4 @@
 /Examples/
 /.idea
 !schemas/organizations.json
+!azure-sample.ini
