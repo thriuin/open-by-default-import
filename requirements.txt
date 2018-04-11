@@ -5,6 +5,7 @@ azure-storage-blob>=1.1.0
 azure-storage-common>=1.1.0
 azure-storage-nspkg>=3.0.0
 ckan>=2.6
+ckanapi>=4.1
 configparser>=3.5.0
 cryptography>=2.1.4
 enum34>=1.1.6
@@ -13,4 +14,6 @@ ipaddress>=1.0.19
 lxml>=4.2.0
 pycparser>=2.18
 pyyaml=3.12
+simplejson
+PyYAML>=3.12
 uuid>=1.30

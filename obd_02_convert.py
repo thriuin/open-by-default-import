@@ -1,4 +1,4 @@
-import argparse
+import ConfigParser
 import os
 import simplejson as json
 import uuid
@@ -139,19 +139,22 @@ def main(file_list, dest_file):
             output_file.write(json_text + '\n')
 
 
-# Read an individual file or a directory of .json files
-parser = argparse.ArgumentParser(description='Convert Open by Default GCDocs JSON files to CKAN JSON lines format')
-parser.add_argument('source_file', help='ObD XML file or directory')
-parser.add_argument('dest_file', help='CKAN JSON Lines output file')
-args = parser.parse_args()
+Config = ConfigParser.ConfigParser()
+Config.read('azure.ini')
+
 json_file_list = []
-if os.path.isfile(args.source_file):
-    json_file_list.append(args.source_file)
-elif os.path.isdir(args.source_file):
-    for root, dirs, files in os.walk(args.source_file):
+file_source = Config.get('working', 'intake_directory')
+dest_dir = Config.get('working', 'ckanjson_directory')
+file_output = datetime.now().strftime("ckan_obd_%Y-%m-%d_%H-%M-%S.jsonl")
+
+# Read an individual file or a directory of .json files
+if os.path.isfile(file_source):
+    json_file_list.append(file_source)
+elif os.path.isdir(file_source):
+    for root, dirs, files in os.walk(file_source):
         for json_file in files:
             if json_file.endswith(".json"):
                 json_file_list.append((os.path.join(root, json_file)))
 
 # Perform the conversion on one or more files
-main(json_file_list, args.dest_file)
+main(json_file_list, os.path.join(dest_dir, file_output))
