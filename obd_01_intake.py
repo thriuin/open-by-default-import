@@ -37,15 +37,18 @@ def read_xml(filename):
 Config = ConfigParser.ConfigParser()
 Config.read('azure.ini')
 
-block_blob_service = BlockBlobService(Config.get('azure-blob-storage', 'account_name'),
-                                      Config.get('azure-blob-storage', 'account_key'))
+azure_account_name = Config.get('azure-blob-storage', 'account_name')
+azure_account_key = Config.get('azure-blob-storage', 'account_key')
+azure_gcdocs_container = Config.get('azure-blob-storage', 'account_gcdocs_container')
+
+block_blob_service = BlockBlobService(azure_account_name, azure_account_key)
 
 # Create a temp directory to hold imported XML metadata files
 dir_path = mkdtemp()
 print dir_path
 
 # Download XML files from Azure and convert to JSON format
-generator = block_blob_service.list_blobs('obd-dev-in')
+generator = block_blob_service.list_blobs(azure_gcdocs_container)
 basedir = Config.get('working', 'intake_directory')
 for blob in generator:
     if os.path.splitext(blob.name)[1] == '.xml':
@@ -55,7 +58,7 @@ for blob in generator:
         with open(os.path.join(basedir, "{0}.json".format(basename).lower()), 'w') as jsonfile:
             print os.path.basename(blob.name)
             local_file = os.path.join(dir_path, os.path.basename(blob.name).lower())
-            block_blob_service.get_blob_to_path('obd-dev-in', blob.name, local_file)
+            block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
             xfields = read_xml(local_file)
             xfields['GCID'] = basename
             xfields['GCfile'] = source_name
@@ -64,7 +67,8 @@ for blob in generator:
             # print ""
             jsonfile.write(json.dumps(xfields, indent=4))
     else:
-        local_file = os.path.join(basedir, os.path.basename(blob.name).lower())
-        block_blob_service.get_blob_to_path('obd-dev-in', blob.name, local_file)
+  #      local_file = os.path.join(basedir, os.path.basename(blob.name).lower())
+   #     block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
+        pass
 
 rmtree(dir_path)

@@ -60,8 +60,9 @@ def convert(fields, filename):
     obd_ds['keywords'] = {}
     if 'Subject' in fields:
         keywords_by_lang = fields['Subject'].split('|')
-        obd_ds['keywords']['en'] = keywords_by_lang[0].split(',')
-        obd_ds['keywords']['fr'] = keywords_by_lang[1].split(',')
+        if len(keywords_by_lang) == 2:
+            obd_ds['keywords']['en'] = keywords_by_lang[0].split(',')
+            obd_ds['keywords']['fr'] = keywords_by_lang[1].split(',')
     if not fields.get('subject', None):
         obd_ds['subject'] = ["information_and_communications"]
 
@@ -148,6 +149,7 @@ dest_dir = Config.get('working', 'ckanjson_directory')
 file_output = datetime.now().strftime("ckan_obd_%Y-%m-%d_%H-%M-%S.jsonl")
 
 # Read an individual file or a directory of .json files
+# For this project, it will almost always be a directory
 if os.path.isfile(file_source):
     json_file_list.append(file_source)
 elif os.path.isdir(file_source):
