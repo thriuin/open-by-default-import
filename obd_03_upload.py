@@ -10,35 +10,146 @@ from tempfile import mkdtemp
 import os
 import simplejson as json
 
-
-def md5(file_to_hash):
-    hash_md5 = hashlib.md5()
-    with open(file_to_hash, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
-
-
-def sha384(file_to_hash):
-    hash_sha = hashlib.sha384()
-    with open(file_to_hash, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_sha.update(chunk)
-    return hash_sha.hexdigest()
-
+# Read configuration information and initialize
 
 Config = ConfigParser.ConfigParser()
 Config.read('azure.ini')
-remote_ckan_url = Config.get('ckan', 'remote_url')
+
+ckanjson_dir = Config.get('working', 'ckanjson_directory')
 
 block_blob_service = BlockBlobService(Config.get('azure-blob-storage', 'account_name'),
                                       Config.get('azure-blob-storage', 'account_key'))
 
-ckanjson_dir = Config.get('working', 'ckanjson_directory')
-download_ckan_dir = mkdtemp()
-download_gcdocs_dir = mkdtemp()
+ckan_container = Config.get('azure-blob-storage', 'account_obd_container')
+doc_intake_dir = Config.get('working', 'intake_directory')
 
-ua = 'Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:59.0) Gecko/20100101 Firefox/59.0'
+
+def md5(file_to_hash):
+    """
+    Get an md5 hash value for a file.
+    :param file_to_hash: path to file to hash
+    :return: md5 hash value or None if the file could not be found
+    """
+
+    hash_md5 = hashlib.md5()
+    if os.path.isfile(file_to_hash):
+        with open(file_to_hash, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+    else:
+        print "File not found: {0}".format(file_to_hash)
+        return None
+
+
+def sha384(file_to_hash):
+    """
+    Get a SHA 384 hash value for a file.
+    :param file_to_hash: path to file to hash
+    :return: SHA 384 hash value or None if the file could not be found
+    """
+
+    hash_sha = hashlib.sha384()
+    if os.path.isfile(file_to_hash):
+        with open(file_to_hash, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_sha.update(chunk)
+        return hash_sha.hexdigest()
+    else:
+        print "File not found: {0}".format(file_to_hash)
+        return None
+
+
+def get_ckan_record(record_id):
+    """
+    Retrieve a CKAN dataset record
+    :param record_id: Unique Identifier for the dataset - For Open Canada, these are always UUIS's
+    :return: The CKAN package, or an empty dict if the dataset could not be retrieved
+    """
+
+    remote_ckan_url = Config.get('ckan', 'remote_url')
+    user_agent = Config.get('web', 'user_agent')
+    with RemoteCKAN(remote_ckan_url, user_agent=user_agent) as ckan_instance:
+        package_record = {}
+        try:
+            package_record = ckan_instance.action.package_show(id=record_id)
+
+        except NotFound:
+            # This is a new record!
+            print('Cannot find record {0}: {1}'.format(obd_record['id'], obd_record['title_translated']['en']))
+
+        return package_record
+
+
+def add_ckan_record(package_dict):
+    """
+    Add a new dataset to the OBD Portal
+    :param package_dict: JSON dict of the new package
+    :return: The created package
+    """
+
+    remote_ckan_url = Config.get('ckan', 'remote_url')
+    remote_ckan_api = Config.get('ckan', 'remote_api_key')
+    user_agent = Config.get('web', 'user_agent')
+    del package_dict['date_modified']
+    del package_dict['date_published']
+    del package_dict['state']
+    del package_dict['resources']
+    with RemoteCKAN(remote_ckan_url, user_agent=user_agent, apikey=remote_ckan_api) as ckan_instance:
+        try:
+            return ckan_instance.action.package_create(package_dict)
+        except Exception as ex:
+            print ex.message
+
+
+def update_resource(package_id, resource_file):
+    """
+    Add or update the resource file for the dataset
+    :param package_id: OBD dataset ID
+    :param resource_file: path to the resource file
+    :return: Nothing
+    """
+
+    remote_ckan_url = Config.get('ckan', 'remote_url')
+    remote_ckan_api = Config.get('ckan', 'remote_api_key')
+    user_agent = Config.get('web', 'user_agent')
+    with RemoteCKAN(remote_ckan_url, user_agent=user_agent, apikey=remote_ckan_api) as ckan_instance:
+        try:
+            package_record = ckan_instance.action.package_show(id=package_id)
+        except NotFound as nf:
+            print nf.message
+            return
+
+        if len(package_record['resources']) == 0:
+            ckan_instance.action.resource_create(package_id=package_id,
+                                                 url='',
+                                                 upload=open(resource_file, 'rb'))
+        else:
+            ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
+                                                url='',
+                                                upload=open(resource_file, 'rb'))
+
+
+def get_blob(container, blob_name, local_name):
+    """
+    Copy of file from Azure blob storage to the local file system
+    :param container: Azure Blob Storage container name
+    :param blob_name: Azure Blob file name
+    :param local_name: Local file name
+    :return: Blob object or None if the blob could not be copied
+    """
+    blob = None
+    try:
+        blob = block_blob_service.get_blob_to_path(container, blob_name, local_name)
+    except AzureMissingResourceHttpError as amrh_ex:
+        print('Cannot find blob: {0}'.format(obd_resource_name))
+        print amrh_ex.message
+    except Exception as ex:
+        print ex.message
+    return blob
+
+
+download_ckan_dir = mkdtemp()
 
 jsonl_file_list = []
 for root, dirs, files in os.walk(ckanjson_dir):
@@ -47,57 +158,64 @@ for root, dirs, files in os.walk(ckanjson_dir):
             jsonl_file_list.append((os.path.join(root, json_file)))
 assert len(jsonl_file_list) > 0, "Nothing to import - no files found."
 
-with RemoteCKAN(remote_ckan_url, user_agent=ua) as ckan_instance:
-    for ckan_record in jsonl_file_list:
-        with open(ckan_record, 'r') as jl_file:
-            for jl_line in jl_file:
-                obd_record = json.loads(jl_line)
-                obd_resource_name = ''
-                last_modified = dateparser.parse(obd_record['date_modified'])
-                try:
-                    ckan_record = ckan_instance.action.package_show(id=obd_record['id'])
-                    assert len(ckan_record['resources']) == 1
-                    obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
-                                                                   ckan_record['resources'][0]['name']).lower()
-                    obd_gcdocs_name = 'Documents/{0}'.format(ckan_record['resources'][0]['name'].lower())
-                    # Use the resource hash to decide if the file needs to be updated. Retrieve the file from Azure and
-                    # compare to latest file from GCDocs
+for ckan_record in jsonl_file_list:
+    with open(ckan_record, 'r') as jl_file:
+        for jl_line in jl_file:
+            obd_record = json.loads(jl_line)
 
-                    # 1. Get the current published file and hash it
-                    local_ckan_file = os.path.join(download_ckan_dir,
-                                                   os.path.basename(ckan_record['resources'][0]['name']))
-                    block_blob_service.get_blob_to_path('archive-queue', obd_resource_name, local_ckan_file)
-                    ckan_sha = sha384(local_ckan_file)
+            last_modified = dateparser.parse(obd_record['date_modified'])
 
-                    # 2. Get the uploaded file and hash it
-                    local_gcdocs_file = os.path.join(download_gcdocs_dir,
-                                                     os.path.basename(ckan_record['resources'][0]['name']))
-                    block_blob_service.get_blob_to_path('opengovtestqueue', obd_gcdocs_name, local_gcdocs_file)
-                    gcdocs_sha = sha384(local_gcdocs_file)
+            # Get the current published file from the OBD Portal. It may not exist if this is the first
+            # time the document has been posted to the portal
 
-                    if ckan_sha == gcdocs_sha:
-                        print "No file update required"
+            ckan_record = get_ckan_record(obd_record['id'])
 
-                    else:
-                        print "Files differ!"
-                        # Upload files
+            # If the record does not exist, then add the document to the OBD Portal.
+            if len(ckan_record) == 0:
+                ckan_record = add_ckan_record(obd_record)
 
-                    # Update metadata?
+            # If this record has more than one resource, it cannot be an Open by Default record
 
-                    os.remove(local_ckan_file)
-                    os.remove(local_gcdocs_file)
-                except NotFound:
-                    print('Cannot find record {0}: {1}'.format(obd_record['id'], obd_record['title_translated']['en']))
-                    # This is a new record!
-                    continue
-                except AzureMissingResourceHttpError as amrh_ex:
-                    print('Cannot find blob: {0}'.format(obd_resource_name))
-                    continue
-                except Exception as ex:
-                    print ex.message
-                # @TODO Remove - Temp
+            num_of_resources = len(ckan_record['resources'])
+            if num_of_resources > 1:
+                print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
                 break
 
+            local_gcdocs_file = os.path.join(doc_intake_dir,
+                                             os.path.basename(ckan_record['resources'][0]['name']).lower())
+            if num_of_resources == 1:
+                obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
+                                                               ckan_record['resources'][0]['name']).lower()
+                # obd_gcdocs_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['name'].lower())
+                local_ckan_file = os.path.join(download_ckan_dir,
+                                               os.path.basename(ckan_record['resources'][0]['name']).lower())
+                # Ensure we can retrieve the resource
+                if not get_blob(ckan_container, obd_resource_name, local_ckan_file):
+                    break
+
+                ckan_sha = sha384(local_ckan_file)
+                if not ckan_sha:
+                    break
+
+                # 2. Get the uploaded file and hash it
+
+                gcdocs_sha = sha384(local_gcdocs_file)
+                if not gcdocs_sha:
+                    break
+
+                if ckan_sha == gcdocs_sha:
+                    print "No file update required"
+
+                else:
+                    print "Files differ!"
+                    # Upload files
+                    update_resource(obd_record['id'], local_gcdocs_file)
+                # Update metadata?
+                os.remove(local_ckan_file)
+            else:
+                update_resource(obd_record['id'], local_gcdocs_file)
+
+            break
+
 os.rmdir(download_ckan_dir)
-os.rmdir(download_gcdocs_dir)
 exit(0)
