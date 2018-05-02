@@ -14,7 +14,7 @@ oc_organizations = {
 
 
 def load_oc_resource_format():
-    with open('schemas\\presets.yaml', 'r') as preset_file:
+    with open(os.path.join('schemas', 'presets.yaml'), 'r') as preset_file:
         presets = yaml.load(preset_file)
         resource_formats = {}
         resource_types = {}
@@ -92,11 +92,23 @@ def convert(fields, filename):
     if 'Description French' in fields:
         obd_ds['notes_translated']['fr'] = fields['Description French']
 
+    if 'Publisher Organization- Section' in fields:
+        org_section = fields['Publisher Organization- Section'].split('|')
+        if len(org_section) == 2:
+            obd_ds['org_section']['en'] = org_section[0]
+            obd_ds['org_section']['fr'] = org_section[1]
+
+    # The Usage Condition is not currently being set.
+    obd_ds['usage_condition'] = {}
+
+    # The maintainer e-mail is not currently provided by OBD so it is set to
+    # open-ouvert@tbs-sct.gc.ca
+    obd_ds['maintainer_email'] = 'open-ouvert@tbs-sct.gc.ca'
+
     obd_res = {}
     res_name = os.path.basename(filename)
     obd_res['name_translated'] = {'en': res_name, 'fr': res_name}
-    obd_res['id'] = str(uuid.uuid5(uuid.NAMESPACE_URL,
-                                   'http://obd.open.canada.ca/resources/' + filename))
+
     # Terrible Hack
     obd_res['format'] = filename.split('.')[1].upper()
     if obd_res['format'] not in oc_resource_formats:

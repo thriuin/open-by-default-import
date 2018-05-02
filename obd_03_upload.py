@@ -91,16 +91,14 @@ def add_ckan_record(package_dict):
     remote_ckan_url = Config.get('ckan', 'remote_url')
     remote_ckan_api = Config.get('ckan', 'remote_api_key')
     user_agent = Config.get('web', 'user_agent')
-    del package_dict['date_modified']
-    del package_dict['date_published']
-    del package_dict['state']
-    del package_dict['resources']
+    new_package = None
+
     with RemoteCKAN(remote_ckan_url, user_agent=user_agent, apikey=remote_ckan_api) as ckan_instance:
         try:
-            return ckan_instance.action.package_create(package_dict)
+            new_package = ckan_instance.action.package_create(**package_dict)
         except Exception as ex:
             print ex.message
-
+    return new_package
 
 def update_resource(package_id, resource_file):
     """
@@ -183,6 +181,9 @@ for ckan_record in jsonl_file_list:
 
             local_gcdocs_file = os.path.join(doc_intake_dir,
                                              os.path.basename(ckan_record['resources'][0]['name']).lower())
+            # Set the file size in the CKAN record
+            ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
+
             if num_of_resources == 1:
                 obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
                                                                ckan_record['resources'][0]['name']).lower()
@@ -191,11 +192,14 @@ for ckan_record in jsonl_file_list:
                                                os.path.basename(ckan_record['resources'][0]['name']).lower())
                 # Ensure we can retrieve the resource
                 if not get_blob(ckan_container, obd_resource_name, local_ckan_file):
-                    break
+                    local_ckan_file = None
 
-                ckan_sha = sha384(local_ckan_file)
-                if not ckan_sha:
-                    break
+                if local_ckan_file:
+                    ckan_sha = sha384(local_ckan_file)
+                    if not ckan_sha:
+                        break
+                else:
+                    ckan_sha = ''
 
                 # 2. Get the uploaded file and hash it
 
@@ -211,11 +215,12 @@ for ckan_record in jsonl_file_list:
                     # Upload files
                     update_resource(obd_record['id'], local_gcdocs_file)
                 # Update metadata?
-                os.remove(local_ckan_file)
+
+                if local_ckan_file:
+                    os.remove(local_ckan_file)
             else:
                 update_resource(obd_record['id'], local_gcdocs_file)
 
-            break
 
 os.rmdir(download_ckan_dir)
 exit(0)

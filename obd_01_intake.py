@@ -62,13 +62,10 @@ for blob in generator:
             xfields = read_xml(local_file)
             xfields['GCID'] = basename
             xfields['GCfile'] = source_name
-            # for xfield in xfields:
-            #     print u"Ref {0}: {1}".format(xfield, xfields[xfield])
-            # print ""
+
             jsonfile.write(json.dumps(xfields, indent=4))
     else:
         local_file = os.path.join(basedir, os.path.basename(blob.name).lower())
         block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
-    break
 
 rmtree(dir_path)
