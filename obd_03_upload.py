@@ -1,14 +1,16 @@
-from ckan.logic import NotFound
-from ckanapi import RemoteCKAN
+
 import ConfigParser
 import hashlib
+import logging
+import os
+import simplejson as json
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
+from ckan.logic import NotFound
+from ckanapi import RemoteCKAN
 from dateutil import parser as dateparser
 from tempfile import mkdtemp
 
-import os
-import simplejson as json
 
 # Read configuration information and initialize
 
@@ -22,6 +24,8 @@ block_blob_service = BlockBlobService(Config.get('azure-blob-storage', 'account_
 
 ckan_container = Config.get('azure-blob-storage', 'account_obd_container')
 doc_intake_dir = Config.get('working', 'intake_directory')
+logging.basicConfig()
+
 
 
 def md5(file_to_hash):
@@ -38,7 +42,7 @@ def md5(file_to_hash):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     else:
-        print "File not found: {0}".format(file_to_hash)
+        logging.warning("md5(): File not found: {0}".format(file_to_hash))
         return None
 
 
@@ -56,7 +60,7 @@ def sha384(file_to_hash):
                 hash_sha.update(chunk)
         return hash_sha.hexdigest()
     else:
-        print "File not found: {0}".format(file_to_hash)
+        logging.warning("sha384() File not found: {0}".format(file_to_hash))
         return None
 
 
@@ -76,7 +80,8 @@ def get_ckan_record(record_id):
 
         except NotFound:
             # This is a new record!
-            print('Cannot find record {0}: {1}'.format(obd_record['id'], obd_record['title_translated']['en']))
+            logging.info('get_ckan_record(): Cannot find record {0}: {1}'.format(obd_record['id'],
+                                                                                 obd_record['title_translated']['en']))
 
         return package_record
 
@@ -97,8 +102,29 @@ def add_ckan_record(package_dict):
         try:
             new_package = ckan_instance.action.package_create(**package_dict)
         except Exception as ex:
-            print ex.message
+            logging.error("add_ckan_record(): {0}".format(ex.message))
     return new_package
+
+
+def update_ckan_record(package_dict):
+    """
+    Add a new dataset to the OBD Portal
+    :param package_dict: JSON dict of the new package
+    :return: The created package
+    """
+
+    remote_ckan_url = Config.get('ckan', 'remote_url')
+    remote_ckan_api = Config.get('ckan', 'remote_api_key')
+    user_agent = Config.get('web', 'user_agent')
+    new_package = None
+
+    with RemoteCKAN(remote_ckan_url, user_agent=user_agent, apikey=remote_ckan_api) as ckan_instance:
+        try:
+            new_package = ckan_instance.action.package_patch(**package_dict)
+        except Exception as ex:
+            logging.error("update_ckan_record(): {0}".format(ex.message))
+    return new_package
+
 
 def update_resource(package_id, resource_file):
     """
@@ -115,17 +141,19 @@ def update_resource(package_id, resource_file):
         try:
             package_record = ckan_instance.action.package_show(id=package_id)
         except NotFound as nf:
-            print nf.message
+            logging.error("update_resource(): {0}".format(nf.message))
             return
 
         if len(package_record['resources']) == 0:
             ckan_instance.action.resource_create(package_id=package_id,
                                                  url='',
                                                  upload=open(resource_file, 'rb'))
+            logging.info("update_resource(): added resource to {0}".format(package_id))
         else:
             ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
                                                 url='',
                                                 upload=open(resource_file, 'rb'))
+            logging.info("update_resource(): updated resource {0}".format(package_record['resources'][0]['id']))
 
 
 def get_blob(container, blob_name, local_name):
@@ -140,10 +168,10 @@ def get_blob(container, blob_name, local_name):
     try:
         blob = block_blob_service.get_blob_to_path(container, blob_name, local_name)
     except AzureMissingResourceHttpError as amrh_ex:
-        print('Cannot find blob: {0}'.format(obd_resource_name))
-        print amrh_ex.message
+        logging.info('get_blob(): Cannot find blob: {0}'.format(obd_resource_name))
+        logging.error("get_blob(): ".format(amrh_ex.message))
     except Exception as ex:
-        print ex.message
+        logging.error("get_blob(): ".format(ex.message))
     return blob
 
 
@@ -187,7 +215,7 @@ for ckan_record in jsonl_file_list:
             if num_of_resources == 1:
                 obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
                                                                ckan_record['resources'][0]['name']).lower()
-                # obd_gcdocs_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['name'].lower())
+
                 local_ckan_file = os.path.join(download_ckan_dir,
                                                os.path.basename(ckan_record['resources'][0]['name']).lower())
                 # Ensure we can retrieve the resource
@@ -208,19 +236,20 @@ for ckan_record in jsonl_file_list:
                     break
 
                 if ckan_sha == gcdocs_sha:
-                    print "No file update required"
+                    logging.info("No file update required")
 
                 else:
-                    print "Files differ!"
+                    logging.info("Files differ!")
                     # Upload files
                     update_resource(obd_record['id'], local_gcdocs_file)
-                # Update metadata?
 
                 if local_ckan_file:
                     os.remove(local_ckan_file)
             else:
                 update_resource(obd_record['id'], local_gcdocs_file)
 
+            del obd_record['resources']
+            update_ckan_record(obd_record)
 
 os.rmdir(download_ckan_dir)
 exit(0)
