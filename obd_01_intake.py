@@ -10,7 +10,11 @@ from tempfile import mkdtemp
 
 
 def read_xml(filename):
-    root = etree.parse(filename).getroot()
+    try:
+        root = etree.parse(filename).getroot()
+    except etree.XMLSyntaxError as xe:
+        print xe.message
+        return None
 
     refs, extras = {}, {}
     assert (root.tag == "enterpriseLibrary")
@@ -27,9 +31,8 @@ def read_xml(filename):
             r = {}
             for l in row.findall('property'):
                 r[l.attrib['name']] = l.find('value').text
-            if r['metadata']:
-                extras.update(r)
-    refs['extras'] = extras
+            if r['metadata'] and r['attribute']:
+                refs[r['attribute']] = r['metadata']
 
     return refs
 
@@ -58,10 +61,12 @@ for blob in generator:
         with open(os.path.join(basedir, "{0}.json".format(basename).lower()), 'w') as jsonfile:
             print os.path.basename(blob.name)
             local_file = os.path.join(dir_path, os.path.basename(blob.name).lower())
+            assert isinstance(azure_gcdocs_container, str)
             block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
             xfields = read_xml(local_file)
-            xfields['GCID'] = basename
-            xfields['GCfile'] = source_name
+            if xfields:
+                xfields['GCID'] = basename
+                xfields['GCfile'] = source_name
 
             jsonfile.write(json.dumps(xfields, indent=4))
     else:

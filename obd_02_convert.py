@@ -84,8 +84,13 @@ def convert(fields, filename):
     obd_ds['doc_classification_code'] = fields['Classification Code']
     obd_ds['date_published'] = fields['Date Created']
     obd_ds['date_modified'] = fields['Date Modified']
-    #@todo Replace with text from XML
-    obd_ds['date_expires'] = '2099-12-31T00:00:00'
+
+    if 'Expiration Date' in fields:
+        obd_ds['date_expires'] = fields['Expiration Date']
+    else:
+        right_now = datetime.utcnow()
+        default_expiry = datetime(right_now.year + 2, right_now.month, right_now.day, right_now.hour, 0, 0)
+        obd_ds['date_expires'] = default_expiry.isoformat()
     if 'Creator' in fields:
         obd_ds['creator'] = fields['Creator']
     obd_ds['notes_translated'] = {}
