@@ -7,6 +7,7 @@ import requests.exceptions
 import simplejson as json
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
+from azure.storage.blob.models import ResourceProperties
 from ckan.logic import NotFound
 from ckanapi import RemoteCKAN
 from datetime import datetime
@@ -30,6 +31,7 @@ doc_intake_dir = Config.get('working', 'intake_directory')
 archive_container = Config.get('azure-blob-storage', 'account_archive_container')
 
 # Setup logging
+
 logger = logging.getLogger('base')
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
@@ -77,7 +79,7 @@ def sha384(file_to_hash):
 
 def get_ckan_record(record_id):
     """
-    Retrieve a CKAN dataset record
+    Retrieve a CKAN dataset record from a remote CKAN portal
     :param record_id: Unique Identifier for the dataset - For Open Canada, these are always UUIS's
     :return: The CKAN package, or an empty dict if the dataset could not be retrieved
     """
@@ -92,7 +94,7 @@ def get_ckan_record(record_id):
         except NotFound:
             # This is a new record!
             logger.info('get_ckan_record(): Cannot find record {0}: {1}'.format(obd_record['id'],
-                                                                                 obd_record['title_translated']['en']))
+                                                                                obd_record['title_translated']['en']))
         except requests.exceptions.ConnectionError as ce:
             logger.error('get_ckan_record(): Fatal connection error {0}'.format(ce.message))
             exit(code=500)
@@ -102,7 +104,7 @@ def get_ckan_record(record_id):
 
 def add_ckan_record(package_dict):
     """
-    Add a new dataset to the OBD Portal
+    Add a new dataset to the Open by Default Portal
     :param package_dict: JSON dict of the new package
     :return: The created package
     """
@@ -122,7 +124,7 @@ def add_ckan_record(package_dict):
 
 def update_ckan_record(package_dict):
     """
-    Add a new dataset to the OBD Portal
+    Add a new dataset to the Open by Default Portal
     :param package_dict: JSON dict of the new package
     :return: The created package
     """
@@ -144,7 +146,7 @@ def delete_ckan_record(package_id):
     """
     Remove a dataset and its associated resource from CKAN
     :param package_id:
-    :return:
+    :return: Nothing
     """
 
     # First, verify and get the resource ID
@@ -217,7 +219,42 @@ def get_blob(container, blob_name, local_name):
     return blob
 
 
-def get_container_list():
+def put_blob(container, blob_name, local_name):
+    """
+    Upload a file to Azure blob storage
+    :param container: Azure container name
+    :param blob_name: Full name of the blob to create
+    :param local_name: Path of the file to upload
+    :rtype ResourceProperties
+    :return: Properties of uploaded blob
+    """
+    res_properties = None
+    try:
+        res_properties = block_blob_service.create_blob_from_path(container, blob_name, local_name, max_connections=4)
+    except Exception as ex:
+        logger.error("get_blob(): ".format(ex.message))
+    return res_properties
+
+
+def delete_blob(container, blob_name):
+    """
+    Remove a file from blob storage
+    :param container: Azure container name
+    :param blob_name: Full name of the blob to create
+    :return: Nothing
+    """
+    try:
+        block_blob_service.delete_blob(container, blob_name)
+    except Exception as ex:
+        logger.error("get_blob(): ".format(ex.message))
+
+
+def get_gcdoc_blob_list():
+    """
+    Get a list of files that were uploaded by GCDocs. Key them by the unique GCDocs Identifier
+    :rtype: dict
+    :return A dictionary of blob names that use the GCDocs ID as the key (ex. obd-gc0001-123456)
+    """
     # Create a dictionary of the files in the container. Each entry is a list of blobs associated with the document ID
     blob_dict = {}
     blobs = block_blob_service.list_blobs(gcdocs_container)
@@ -232,26 +269,57 @@ def get_container_list():
             blob_dict[key] = key_list
     return blob_dict
 
-gcdocs_blobs = get_container_list()
 
-
-def archive_blobs(blob_prefix):
-    if blob_prefix in gcdocs_blobs:
-        files_to_move = gcdocs_blobs[blob_prefix]
-    # @todo move these files to archive container
-
+# Set up for interacting with Azure
+gcdocs_blobs = get_gcdoc_blob_list()
+processed_gcdocs = []
 download_ckan_dir = mkdtemp()
 
 
+def archive_blobs(blob_prefix, timestamp=None):
+    """
+    Copy the files that were processed in this pass to another container for backup
+    :param blob_prefix: GCDocs Identifier
+    :param timestamp: A timestamp used to set up the archive folder
+    :rtype int
+    :return: Number of files archived
+    """
+    no_files = 0
+    if blob_prefix in gcdocs_blobs:
+        files_to_move = gcdocs_blobs[blob_prefix]
+        if not timestamp:
+            timestamp = datetime.utcnow()
+        archive_date = timestamp.strftime("%Y-%m-%d")
+        archive_time = timestamp.strftime("%H-%M")
+        for gcdocs_file in files_to_move:
+            local_azure_file = os.path.join(download_ckan_dir, gcdocs_file)
+            b = get_blob(gcdocs_container, gcdocs_file, local_azure_file)
+            if b:
+                archive_file = os.path.split(gcdocs_file)[1]
+                archive_path = os.path.join(archive_date, archive_time, archive_file)
+                rp = put_blob(archive_container, archive_path, local_azure_file)
+                if rp.etag:
+                    delete_blob(gcdocs_container, gcdocs_file)
+                os.remove(local_azure_file)
+                no_files += 1
+    return no_files
+
+
+# initialize working variables
+
 jsonl_file_list = []
+this_moment = datetime.utcnow()
+
+# Get a list of JSON line files to process
 for root, dirs, files in os.walk(ckanjson_dir):
     for json_file in files:
         if json_file.endswith(".jsonl"):
             jsonl_file_list.append((os.path.join(root, json_file)))
 assert len(jsonl_file_list) > 0, "Nothing to import - no files found."
 
-for ckan_record in jsonl_file_list:
-    with open(ckan_record, 'r') as jl_file:
+# Process all Json lines input files
+for ckan_input in jsonl_file_list:
+    with open(ckan_input, 'r') as jl_file:
         for jl_line in jl_file:
             obd_record = json.loads(jl_line)
 
@@ -265,7 +333,7 @@ for ckan_record in jsonl_file_list:
 
                 # If the dataset exists, then delete the resource and the dataset.
                 delete_ckan_record(obd_record['id'])
-                archive_blobs(obd_record_key)
+                archive_blobs(obd_record_key, timestamp=this_moment)
                 continue
 
             # Get the current published file from the OBD Portal. It may not exist if this is the first
@@ -282,7 +350,7 @@ for ckan_record in jsonl_file_list:
             num_of_resources = len(ckan_record['resources'])
             if num_of_resources > 1:
                 print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
-                archive_blobs(obd_record_key)
+                archive_blobs(obd_record_key, timestamp=this_moment)
                 break
 
             local_gcdocs_file = os.path.join(doc_intake_dir,
@@ -314,7 +382,7 @@ for ckan_record in jsonl_file_list:
                 else:
                     ckan_sha = ''
 
-                # 2. Get the uploaded file and hash it
+                # Get the uploaded file and hash it
 
                 gcdocs_sha = sha384(local_gcdocs_file)
                 if not gcdocs_sha:
@@ -337,9 +405,14 @@ for ckan_record in jsonl_file_list:
 
             del obd_record['resources']
             update_ckan_record(obd_record)
-            archive_blobs(obd_record_key)
+            archive_blobs(obd_record_key, timestamp=this_moment)
 
-
+    # Save a copy of the JSON line file for audit purposes
+    todays_date = this_moment.strftime("%Y-%m-%d")
+    todays_time = this_moment.strftime("%H-%M")
+    ckan_line_base = os.path.basename(ckan_input)
+    ckan_line_archive = os.path.join(todays_date, todays_time, ckan_line_base)
+    put_blob(archive_container, ckan_line_archive, ckan_input)
 
 os.rmdir(download_ckan_dir)
 exit(0)
