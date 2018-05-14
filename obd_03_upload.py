@@ -228,12 +228,14 @@ def put_blob(container, blob_name, local_name):
     :rtype ResourceProperties
     :return: Properties of uploaded blob
     """
-    res_properties = None
+    success = False
     try:
-        res_properties = block_blob_service.create_blob_from_path(container, blob_name, local_name, max_connections=4)
+        block_blob_service.create_blob_from_path(container, blob_name, local_name, max_connections=4)
+        # Verify
+        success = block_blob_service.exists(container, blob_name=blob_name)
     except Exception as ex:
         logger.error("get_blob(): ".format(ex.message))
-    return res_properties
+    return success
 
 
 def delete_blob(container, blob_name):
@@ -297,8 +299,7 @@ def archive_blobs(blob_prefix, timestamp=None):
             if b:
                 archive_file = os.path.split(gcdocs_file)[1]
                 archive_path = os.path.join(archive_date, archive_time, archive_file)
-                rp = put_blob(archive_container, archive_path, local_azure_file)
-                if rp.etag:
+                if put_blob(archive_container, archive_path, local_azure_file):
                     delete_blob(gcdocs_container, gcdocs_file)
                 os.remove(local_azure_file)
                 no_files += 1
