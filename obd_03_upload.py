@@ -401,6 +401,7 @@ for ckan_input in jsonl_file_list:
 
                 if local_ckan_file:
                     os.remove(local_ckan_file)
+
             else:
                 update_resource(obd_record['id'], local_gcdocs_file)
 
@@ -408,12 +409,16 @@ for ckan_input in jsonl_file_list:
             update_ckan_record(obd_record)
             archive_blobs(obd_record_key, timestamp=this_moment)
 
+            if os.path.exists(local_gcdocs_file):
+                os.remove(local_gcdocs_file)
+
     # Save a copy of the JSON line file for audit purposes
     todays_date = this_moment.strftime("%Y-%m-%d")
     todays_time = this_moment.strftime("%H-%M")
     ckan_line_base = os.path.basename(ckan_input)
     ckan_line_archive = os.path.join(todays_date, todays_time, ckan_line_base)
     put_blob(archive_container, ckan_line_archive, ckan_input)
+    os.remove(ckan_input)
 
 os.rmdir(download_ckan_dir)
 exit(0)

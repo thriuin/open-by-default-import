@@ -155,6 +155,7 @@ def main(file_list, dest_file):
             fields = json.load(json_filed)
             obd_ds = convert(fields, fields['GCfile'])
             json_text = json.dumps(obd_ds)
+        os.remove(json_filename)
         with open(dest_file, 'a') as output_file:
             output_file.write(json_text + '\n')
 
