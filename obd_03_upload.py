@@ -251,6 +251,19 @@ def delete_blob(container, blob_name):
         logger.error("get_blob(): ".format(ex.message))
 
 
+def get_gcdoc_name_root(blob_name):
+    """
+    Get the root of a file name exported from GCDOCS
+    :param blob_name: a file name ex. 123.doc or 123.doc.xml
+    :return: File name root or None if one is not found
+    """
+    key_split = blob_name.split('.')
+    if len(key_split) > 0:
+        return key_split[0]
+    else:
+        return None
+
+
 def get_gcdoc_blob_list():
     """
     Get a list of files that were uploaded by GCDocs. Key them by the unique GCDocs Identifier
@@ -261,8 +274,8 @@ def get_gcdoc_blob_list():
     blob_dict = {}
     blobs = block_blob_service.list_blobs(gcdocs_container)
     for blob in blobs:
-        key = blob.name[0:17].lower()
-        if key in blob_dict:
+        key = get_gcdoc_name_root(blob.name)
+        if key and key in blob_dict:
             key_list = blob_dict[key]
             key_list.append(blob.name)
             blob_dict[key] = key_list
@@ -324,7 +337,7 @@ for ckan_input in jsonl_file_list:
         for jl_line in jl_file:
             obd_record = json.loads(jl_line)
 
-            obd_record_key = obd_record['resources'][0]['name_translated']['en'][0:17].lower()  # type: str
+            obd_record_key = get_gcdoc_name_root(obd_record['resources'][0]['name_translated']['en'])  # type: str
 
             # Verification check - do not post documents that have already expired. Remove it from the portal
             # if it was uploaded before.
@@ -355,7 +368,7 @@ for ckan_input in jsonl_file_list:
                 break
 
             local_gcdocs_file = os.path.join(doc_intake_dir,
-                                             os.path.basename(ckan_record['resources'][0]['name']).lower())
+                                             os.path.basename(ckan_record['resources'][0]['name']))
             # Set the file size in the CKAN record
             ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
 
@@ -363,10 +376,10 @@ for ckan_input in jsonl_file_list:
             # currently uploaded file. If they are the same, no further action is required. If not, then update.
             if num_of_resources == 1:
                 obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
-                                                               ckan_record['resources'][0]['name']).lower()
+                                                               ckan_record['resources'][0]['name'])
 
                 local_ckan_file = os.path.join(download_ckan_dir,
-                                               os.path.basename(ckan_record['resources'][0]['name']).lower())
+                                               os.path.basename(ckan_record['resources'][0]['name']))
                 # Ensure we can retrieve the resource
                 if not get_blob(ckan_container, obd_resource_name, local_ckan_file):
                     # The Azure API may create blank files

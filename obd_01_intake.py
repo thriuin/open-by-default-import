@@ -58,9 +58,9 @@ for blob in generator:
         source_name = os.path.splitext(os.path.basename(blob.name))[0]
         basename = os.path.splitext(source_name)[0]
 
-        with open(os.path.join(basedir, "{0}.json".format(basename).lower()), 'w') as jsonfile:
+        with open(os.path.join(basedir, "{0}.json".format(basename)), 'w') as jsonfile:
             print os.path.basename(blob.name)
-            local_file = os.path.join(dir_path, os.path.basename(blob.name).lower())
+            local_file = os.path.join(dir_path, os.path.basename(blob.name))
             assert isinstance(azure_gcdocs_container, str)
             block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
             xfields = read_xml(local_file)
@@ -70,7 +70,7 @@ for blob in generator:
 
             jsonfile.write(json.dumps(xfields, indent=4))
     else:
-        local_file = os.path.join(basedir, os.path.basename(blob.name).lower())
+        local_file = os.path.join(basedir, os.path.basename(blob.name))
         block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
 
 rmtree(dir_path)
