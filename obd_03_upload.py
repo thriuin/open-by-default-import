@@ -80,7 +80,7 @@ def sha384(file_to_hash):
 def get_ckan_record(record_id):
     """
     Retrieve a CKAN dataset record from a remote CKAN portal
-    :param record_id: Unique Identifier for the dataset - For Open Canada, these are always UUIS's
+    :param record_id: Unique Identifier for the dataset - For Open Canada, these are always UUID's
     :return: The CKAN package, or an empty dict if the dataset could not be retrieved
     """
 
@@ -93,8 +93,7 @@ def get_ckan_record(record_id):
 
         except NotFound:
             # This is a new record!
-            logger.info('get_ckan_record(): Cannot find record {0}: {1}'.format(obd_record['id'],
-                                                                                obd_record['title_translated']['en']))
+            logger.info('get_ckan_record(): Cannot find record {0}'.format(record_id))
         except requests.exceptions.ConnectionError as ce:
             logger.error('get_ckan_record(): Fatal connection error {0}'.format(ce.message))
             exit(code=500)
@@ -355,13 +354,17 @@ for ckan_input in jsonl_file_list:
 
             ckan_record = get_ckan_record(obd_record['id'])
 
-            # If the record does not exist, then add the document to the OBD Portal.
+            # If the record does not exist, then add the document to the OBD Portal. This new record will have
+            # a placeholder resource record.
             if len(ckan_record) == 0:
                 ckan_record = add_ckan_record(obd_record)
 
             # If this record has more than one resource, it cannot be an Open by Default record
 
-            num_of_resources = len(ckan_record['resources'])
+            num_of_resources = 0
+            if 'resources' in ckan_record:
+                num_of_resources = len(ckan_record['resources'])
+
             if num_of_resources > 1:
                 print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
                 archive_blobs(obd_record_key, timestamp=this_moment)
