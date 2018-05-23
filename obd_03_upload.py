@@ -161,7 +161,8 @@ def delete_ckan_record(package_id):
 
     with RemoteCKAN(remote_ckan_url, user_agent=user_agent, apikey=remote_ckan_api) as ckan_instance:
         try:
-            ckan_instance.action.resource_delete(id=package_record['resources'][0]['id'])
+            delete_blob(ckan_container, 'resources/{0}/{1}'.format(package_record['resources'][0]['id'],
+                                                                   package_record['resources'][0]['name'].lower()))
             ckan_instance.action.package_delete(id=package_record['id'])
             ckan_instance.action.dataset_purge(id=package_record['id'])
             logger.info("Deleted expired CKAN record {0}".format(package_record['id']))
