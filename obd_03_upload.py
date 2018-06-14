@@ -101,7 +101,7 @@ def get_ckan_record(record_id):
         except CKANAPIError as ne:
             logger.error('get_ckan_record(): Unexpected error {0}'.format(ne.message))
 
-            return package_record
+        return package_record
 
 
 def add_ckan_record(package_dict):
@@ -191,16 +191,21 @@ def update_resource(package_id, resource_file):
             logger.error("update_resource(): {0}".format(nf.message))
             return
 
-        if len(package_record['resources']) == 0:
-            ckan_instance.action.resource_create(package_id=package_id,
-                                                 url='',
-                                                 upload=open(resource_file, 'rb'))
-            logger.info("update_resource(): added resource to {0}".format(package_id))
-        else:
-            ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
-                                                url='',
-                                                upload=open(resource_file, 'rb'))
-            logger.info("update_resource(): updated resource {0}".format(package_record['resources'][0]['id']))
+        try:
+            if len(package_record['resources']) == 0:
+                ckan_instance.action.resource_create(package_id=package_id,
+                                                     url='',
+                                                     upload=open(resource_file, 'rb'))
+                logger.info("update_resource(): added resource to {0}".format(package_id))
+            else:
+
+                    ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
+                                                        url='',
+                                                        upload=open(resource_file, 'rb'))
+        except CKANAPIError as ce:
+            logger.error("update_resource(): ".format(ce.message))
+
+        logger.info("update_resource(): updated resource {0}".format(package_record['resources'][0]['id']))
 
 
 def get_blob(container, blob_name, local_name):
@@ -360,7 +365,7 @@ for ckan_input in jsonl_file_list:
 
             # If the record does not exist, then add the document to the OBD Portal. This new record will have
             # a placeholder resource record.
-            if len(ckan_record) == 0:
+            if ckan_record is None or len(ckan_record) == 0:
                 ckan_record = add_ckan_record(obd_record)
 
             # If this record has more than one resource, it cannot be an Open by Default record
