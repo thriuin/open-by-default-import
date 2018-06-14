@@ -10,6 +10,7 @@ from azure.storage.blob import BlockBlobService
 from azure.storage.blob.models import ResourceProperties
 from ckan.logic import NotFound
 from ckanapi import RemoteCKAN
+from ckanapi.errors import CKANAPIError
 from datetime import datetime
 from dateutil import parser as dateparser
 from tempfile import mkdtemp
@@ -97,8 +98,10 @@ def get_ckan_record(record_id):
         except requests.exceptions.ConnectionError as ce:
             logger.error('get_ckan_record(): Fatal connection error {0}'.format(ce.message))
             exit(code=500)
+        except CKANAPIError as ne:
+            logger.error('get_ckan_record(): Unexpected error {0}'.format(ne.message))
 
-        return package_record
+            return package_record
 
 
 def add_ckan_record(package_dict):

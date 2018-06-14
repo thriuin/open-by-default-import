@@ -109,6 +109,7 @@ def convert(fields, filename):
         if 'Publisher Organization- Section' in fields:
             org_section = fields['Publisher Organization- Section'].split('|')
             if len(org_section) == 2:
+                obd_ds['org_section'] = {}
                 obd_ds['org_section']['en'] = org_section[0]
                 obd_ds['org_section']['fr'] = org_section[1]
 
