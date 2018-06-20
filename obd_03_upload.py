@@ -9,6 +9,7 @@ from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
 from azure.storage.blob.models import ResourceProperties
 from ckan.logic import NotFound
+from ckan.lib.munge import munge_filename
 from ckanapi import RemoteCKAN
 from ckanapi.errors import CKANAPIError
 from datetime import datetime
@@ -29,7 +30,6 @@ block_blob_service = BlockBlobService(Config.get('azure-blob-storage', 'account_
 ckan_container = Config.get('azure-blob-storage', 'account_obd_container')
 gcdocs_container = Config.get('azure-blob-storage', 'account_gcdocs_container')
 doc_intake_dir = Config.get('working', 'intake_directory')
-archive_container = Config.get('azure-blob-storage', 'account_archive_container')
 
 # Setup logging
 
@@ -272,63 +272,10 @@ def get_gcdoc_name_root(blob_name):
         return None
 
 
-def get_gcdoc_blob_list():
-    """
-    Get a list of files that were uploaded by GCDocs. Key them by the unique GCDocs Identifier
-    :rtype: dict
-    :return A dictionary of blob names that use the GCDocs ID as the key (ex. obd-gc0001-123456)
-    """
-    # Create a dictionary of the files in the container. Each entry is a list of blobs associated with the document ID
-    blob_dict = {}
-    blobs = block_blob_service.list_blobs(gcdocs_container)
-    for blob in blobs:
-        key = get_gcdoc_name_root(blob.name)
-        if key and key in blob_dict:
-            key_list = blob_dict[key]
-            key_list.append(blob.name)
-            blob_dict[key] = key_list
-        else:
-            key_list = [blob.name]
-            blob_dict[key] = key_list
-    return blob_dict
-
-
 # Set up for interacting with Azure
-gcdocs_blobs = get_gcdoc_blob_list()
-processed_gcdocs = []
 download_ckan_dir = mkdtemp()
 
-
-def archive_blobs(blob_prefix, timestamp=None):
-    """
-    Copy the files that were processed in this pass to another container for backup
-    :param blob_prefix: GCDocs Identifier
-    :param timestamp: A timestamp used to set up the archive folder
-    :rtype int
-    :return: Number of files archived
-    """
-    no_files = 0
-    if blob_prefix in gcdocs_blobs:
-        files_to_move = gcdocs_blobs[blob_prefix]
-        if not timestamp:
-            timestamp = datetime.utcnow()
-        archive_date = timestamp.strftime("%Y-%m-%d")
-        archive_time = timestamp.strftime("%H-%M")
-        for gcdocs_file in files_to_move:
-            local_azure_file = os.path.join(download_ckan_dir, gcdocs_file)
-            b = get_blob(gcdocs_container, gcdocs_file, local_azure_file)
-            if b:
-                archive_file = os.path.split(gcdocs_file)[1]
-                archive_path = os.path.join(archive_date, archive_time, archive_file)
-                if put_blob(archive_container, archive_path, local_azure_file):
-                    delete_blob(gcdocs_container, gcdocs_file)
-                os.remove(local_azure_file)
-                no_files += 1
-    return no_files
-
-
 # initialize working variables
-
 jsonl_file_list = []
 this_moment = datetime.utcnow()
 
@@ -355,7 +302,6 @@ for ckan_input in jsonl_file_list:
 
                 # If the dataset exists, then delete the resource and the dataset.
                 delete_ckan_record(obd_record['id'])
-                archive_blobs(obd_record_key, timestamp=this_moment)
                 continue
 
             # Get the current published file from the OBD Portal. It may not exist if this is the first
@@ -376,11 +322,10 @@ for ckan_input in jsonl_file_list:
 
             if num_of_resources > 1:
                 print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
-                archive_blobs(obd_record_key, timestamp=this_moment)
                 break
 
             local_gcdocs_file = os.path.join(doc_intake_dir,
-                                             os.path.basename(ckan_record['resources'][0]['name']))
+                                             munge_filename(os.path.basename(ckan_record['resources'][0]['name'])))
             # Set the file size in the CKAN record
             ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
 
@@ -388,7 +333,7 @@ for ckan_input in jsonl_file_list:
             # currently uploaded file. If they are the same, no further action is required. If not, then update.
             if num_of_resources == 1:
                 obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
-                                                               ckan_record['resources'][0]['name'])
+                                                               munge_filename(ckan_record['resources'][0]['name']))
 
                 local_ckan_file = os.path.join(download_ckan_dir,
                                                os.path.basename(ckan_record['resources'][0]['name']))
@@ -432,7 +377,6 @@ for ckan_input in jsonl_file_list:
 
             del obd_record['resources']
             update_ckan_record(obd_record)
-            archive_blobs(obd_record_key, timestamp=this_moment)
 
             if os.path.exists(local_gcdocs_file):
                 os.remove(local_gcdocs_file)
@@ -442,7 +386,6 @@ for ckan_input in jsonl_file_list:
     todays_time = this_moment.strftime("%H-%M")
     ckan_line_base = os.path.basename(ckan_input)
     ckan_line_archive = os.path.join(todays_date, todays_time, ckan_line_base)
-    put_blob(archive_container, ckan_line_archive, ckan_input)
     os.remove(ckan_input)
 
 os.rmdir(download_ckan_dir)

@@ -3,9 +3,12 @@ import os
 import simplejson as json
 import uuid
 import yaml
+from ckan.lib.munge import munge_filename
 from datetime import datetime
 from dateutil import parser as dateparser
+from shutil import copyfile
 
+# CKAN Open Canada federal department identifiers
 oc_organizations = {
     "Canadian Heritage": '9EEB1859-D658-4E1B-A0E0-45CFAB4E3E5A',
     "Environment Canada": '49E2ADF4-AD7A-43EB-85C8-6433D37ED62C',
@@ -15,6 +18,10 @@ oc_organizations = {
 
 
 def load_oc_resource_format():
+    '''
+    Read in the CKAN Open Canada resource format identifiers
+    :return:
+    '''
     with open(os.path.join('schemas', 'presets.yaml'), 'r') as preset_file:
         presets = yaml.load(preset_file)
         resource_formats = {}
@@ -41,6 +48,12 @@ oc_resource_formats, oc_resource_types, oc_audience_types = load_oc_resource_for
 
 
 def convert(fields, filename):
+    '''
+    Convert the basic imported JSON document metadata to CKAN Package JSON
+    :param fields: JSON file notation
+    :param filename: CKAN JSON lines files to write to
+    :return: CKAN pagage object
+    '''
 
     # Initialize the record
     obd_ds = {'collection': 'publication',
@@ -56,6 +69,7 @@ def convert(fields, filename):
         obd_ds['date_expires'] = default_expiry.isoformat()
     expiry_date = dateparser.parse(obd_ds['date_expires'])
     if expiry_date > datetime.utcnow():
+        # Perform conversion
 
         release_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if not fields.get('date_published'):
@@ -121,7 +135,7 @@ def convert(fields, filename):
         obd_ds['maintainer_email'] = 'open-ouvert@tbs-sct.gc.ca'
 
     obd_res = {}
-    res_name = os.path.basename(filename)
+    res_name = munge_filename(os.path.basename(filename))
     obd_res['name_translated'] = {'en': res_name, 'fr': res_name}
 
     # This is not ideal, but GCDocs does not provide the information we require
@@ -172,12 +186,14 @@ def main(file_list, dest_file):
             output_file.write(json_text + '\n')
 
 
+# Load Azure and file directory configuration information
 Config = ConfigParser.ConfigParser()
 Config.read('azure.ini')
 
 json_file_list = []
 file_source = Config.get('working', 'intake_directory')
 dest_dir = Config.get('working', 'ckanjson_directory')
+archive_dir = Config.get('working', 'archive_directory')
 file_output = datetime.now().strftime("ckan_obd_%Y-%m-%d_%H-%M-%S.jsonl")
 
 # Read an individual file or a directory of .json files
@@ -191,4 +207,6 @@ elif os.path.isdir(file_source):
                 json_file_list.append((os.path.join(root, json_file)))
 
 # Perform the conversion on one or more files
-main(json_file_list, os.path.join(dest_dir, file_output))
+jsonl_file = os.path.join(dest_dir, file_output)
+main(json_file_list, jsonl_file)
+copyfile(jsonl_file, os.path.join(archive_dir, file_output))
