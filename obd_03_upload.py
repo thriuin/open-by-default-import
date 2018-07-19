@@ -290,96 +290,99 @@ assert len(jsonl_file_list) > 0, "Nothing to import - no files found."
 for ckan_input in jsonl_file_list:
     with open(ckan_input, 'r') as jl_file:
         for jl_line in jl_file:
-            obd_record = json.loads(jl_line)
+            try:
+                obd_record = json.loads(jl_line)
 
-            obd_record_key = get_gcdoc_name_root(obd_record['resources'][0]['name_translated']['en'])  # type: str
+                obd_record_key = get_gcdoc_name_root(obd_record['resources'][0]['name_translated']['en'])  # type: str
 
-            # Verification check - do not post documents that have already expired. Remove it from the portal
-            # if it was uploaded before.
-            expiry_date = dateparser.parse(obd_record['date_expires'])
-            if expiry_date <= datetime.utcnow():
-                logger.warn('This record has already expired')
+                # Verification check - do not post documents that have already expired. Remove it from the portal
+                # if it was uploaded before.
+                expiry_date = dateparser.parse(obd_record['date_expires'])
+                if expiry_date <= datetime.utcnow():
+                    logger.warn('This record has already expired')
 
-                # If the dataset exists, then delete the resource and the dataset.
-                delete_ckan_record(obd_record['id'])
-                continue
+                    # If the dataset exists, then delete the resource and the dataset.
+                    delete_ckan_record(obd_record['id'])
+                    continue
 
-            # Get the current published file from the OBD Portal. It may not exist if this is the first
-            # time the document has been posted to the portal
+                # Get the current published file from the OBD Portal. It may not exist if this is the first
+                # time the document has been posted to the portal
 
-            ckan_record = get_ckan_record(obd_record['id'])
+                ckan_record = get_ckan_record(obd_record['id'])
 
-            # If the record does not exist, then add the document to the OBD Portal. This new record will have
-            # a placeholder resource record.
-            if ckan_record is None or len(ckan_record) == 0:
-                ckan_record = add_ckan_record(obd_record)
+                # If the record does not exist, then add the document to the OBD Portal. This new record will have
+                # a placeholder resource record.
+                if ckan_record is None or len(ckan_record) == 0:
+                    ckan_record = add_ckan_record(obd_record)
 
-            # If this record has more than one resource, it cannot be an Open by Default record
+                # If this record has more than one resource, it cannot be an Open by Default record
 
-            num_of_resources = 0
-            if 'resources' in ckan_record:
-                num_of_resources = len(ckan_record['resources'])
+                num_of_resources = 0
+                if 'resources' in ckan_record:
+                    num_of_resources = len(ckan_record['resources'])
 
-            if num_of_resources > 1:
-                print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
-                break
-
-            local_gcdocs_file = os.path.join(doc_intake_dir,
-                                             munge_filename(os.path.basename(ckan_record['resources'][0]['name'])))
-            # Set the file size in the CKAN record
-            ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
-
-            # Check if the resource already exists or not. If it does, download a copy and compare with the
-            # currently uploaded file. If they are the same, no further action is required. If not, then update.
-            if num_of_resources == 1:
-                obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
-                                                               munge_filename(ckan_record['resources'][0]['name']))
-
-                local_ckan_file = os.path.join(download_ckan_dir,
-                                               os.path.basename(ckan_record['resources'][0]['name']))
-                # Ensure we can retrieve the resource
-                if not get_blob(ckan_container, obd_resource_name, local_ckan_file):
-                    # The Azure API may create blank files
-                    if os.path.exists(local_ckan_file):
-                        os.remove(local_ckan_file)
-                    local_ckan_file = None
-
-                if local_ckan_file:
-                    ckan_sha = sha384(local_ckan_file)
-                    if not ckan_sha:
-                        logger.error('Unable to generate SHA 348 Hash for file {0}'.format(local_ckan_file))
-                        # If this is happening, best to quit and investigate
-                        break
-                else:
-                    ckan_sha = ''
-
-                # Get the uploaded file and hash it
-
-                gcdocs_sha = sha384(local_gcdocs_file)
-                if not gcdocs_sha:
-                    logger.error('Unable to generate SHA 348 Hash for file {0}'.format(local_gcdocs_file))
-                    # If this is happening, best to quit and investigate
+                if num_of_resources > 1:
+                    print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
                     break
 
-                if ckan_sha == gcdocs_sha:
-                    logger.info("No file update required for {0}".format(obd_record['id']))
+                local_gcdocs_file = os.path.join(doc_intake_dir,
+                                                 munge_filename(os.path.basename(ckan_record['resources'][0]['name'])))
+                # Set the file size in the CKAN record
+                ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
+
+                # Check if the resource already exists or not. If it does, download a copy and compare with the
+                # currently uploaded file. If they are the same, no further action is required. If not, then update.
+                if num_of_resources == 1:
+                    obd_resource_name = 'resources/{0}/{1}'.format(ckan_record['resources'][0]['id'],
+                                                                   munge_filename(ckan_record['resources'][0]['name']))
+
+                    local_ckan_file = os.path.join(download_ckan_dir,
+                                                   os.path.basename(ckan_record['resources'][0]['name']))
+                    # Ensure we can retrieve the resource
+                    if not get_blob(ckan_container, obd_resource_name, local_ckan_file):
+                        # The Azure API may create blank files
+                        if os.path.exists(local_ckan_file):
+                            os.remove(local_ckan_file)
+                        local_ckan_file = None
+
+                    if local_ckan_file:
+                        ckan_sha = sha384(local_ckan_file)
+                        if not ckan_sha:
+                            logger.error('Unable to generate SHA 348 Hash for file {0}'.format(local_ckan_file))
+                            # If this is happening, best to quit and investigate
+                            break
+                    else:
+                        ckan_sha = ''
+
+                    # Get the uploaded file and hash it
+
+                    gcdocs_sha = sha384(local_gcdocs_file)
+                    if not gcdocs_sha:
+                        logger.error('Unable to generate SHA 348 Hash for file {0}'.format(local_gcdocs_file))
+                        # If this is happening, best to quit and investigate
+                        break
+
+                    if ckan_sha == gcdocs_sha:
+                        logger.info("No file update required for {0}".format(obd_record['id']))
+
+                    else:
+                        logger.info("Updated file from GCDocs for {0}".format(obd_record['id']))
+                        # Upload file
+                        update_resource(obd_record['id'], local_gcdocs_file)
+
+                    if local_ckan_file:
+                        os.remove(local_ckan_file)
 
                 else:
-                    logger.info("Updated file from GCDocs for {0}".format(obd_record['id']))
-                    # Upload file
                     update_resource(obd_record['id'], local_gcdocs_file)
 
-                if local_ckan_file:
-                    os.remove(local_ckan_file)
+                del obd_record['resources']
+                update_ckan_record(obd_record)
 
-            else:
-                update_resource(obd_record['id'], local_gcdocs_file)
-
-            del obd_record['resources']
-            update_ckan_record(obd_record)
-
-            if os.path.exists(local_gcdocs_file):
-                os.remove(local_gcdocs_file)
+                if os.path.exists(local_gcdocs_file):
+                    os.remove(local_gcdocs_file)
+            except Exception as x:
+                logger.error(x.message)
 
     # Save a copy of the JSON line file for audit purposes
     todays_date = this_moment.strftime("%Y-%m-%d")

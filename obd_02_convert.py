@@ -7,6 +7,7 @@ from ckan.lib.munge import munge_filename
 from datetime import datetime
 from dateutil import parser as dateparser
 from shutil import copyfile
+from sys import stderr
 
 # CKAN Open Canada federal department identifiers
 oc_organizations = {
@@ -15,6 +16,11 @@ oc_organizations = {
     "Natural Resources Canada": '9391E0A2-9717-4755-B548-4499C21F917B',
     "Treasury Board of Canada Secretariat": '81765FCD-32B3-4708-A593-3AA00705E62B'
 }
+
+
+class MissingRequiredFieldException(Exception):
+    def __init__(self, message):
+        super(MissingRequiredFieldException, self).__init__(message + '\n')
 
 
 def load_oc_resource_format():
@@ -52,7 +58,7 @@ def convert(fields, filename):
     Convert the basic imported JSON document metadata to CKAN Package JSON
     :param fields: JSON file notation
     :param filename: CKAN JSON lines files to write to
-    :return: CKAN pagage object
+    :return: CKAN package object
     '''
 
     # Initialize the record
@@ -68,18 +74,25 @@ def convert(fields, filename):
         default_expiry = datetime(right_now.year + 2, right_now.month, right_now.day, right_now.hour, 0, 0)
         obd_ds['date_expires'] = default_expiry.isoformat()
     expiry_date = dateparser.parse(obd_ds['date_expires'])
+
     if expiry_date > datetime.utcnow():
+
         # Perform conversion
 
         release_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if not fields.get('date_published'):
+        if 'Date Created' in fields:
+            obd_ds['date_published'] = fields['Date Created']
+        else:
             obd_ds['date_published'] = release_date
 
         obd_ds['state'] = 'active'
         obd_ds['type'] = 'doc'
         obd_ds['license_id'] = "ca-ogl-lgo"
 
-        org_name = fields['Publisher Organization'].split('|')[0].strip()
+        if 'Publisher Organization' in fields:
+            org_name = fields['Publisher Organization'].split('|')[0].strip()
+        else:
+            org_name = 'Treasury Board of Canada Secretariat'
         if org_name in oc_organizations:
             obd_ds['owner_org'] = oc_organizations[org_name]
         else:
@@ -99,6 +112,8 @@ def convert(fields, filename):
 
         # Use unilingual titles where appropriate
         obd_ds['title_translated'] = {}
+        if ('Title English' not in fields) and ('Title French' not in fields):
+            raise MissingRequiredFieldException("Missing Title fields")
         if 'Title French' not in fields:
             obd_ds['title_translated']['fr'] = fields['Title English']
         else:
@@ -108,9 +123,11 @@ def convert(fields, filename):
         else:
             obd_ds['title_translated']['en'] = fields['Title English']
 
-        obd_ds['doc_classification_code'] = fields['Classification Code']
-        obd_ds['date_published'] = fields['Date Created']
-        obd_ds['date_modified'] = fields['Date Modified']
+        if 'Classification Code' in fields:
+            obd_ds['doc_classification_code'] = fields['Classification Code']
+
+        if 'Date Modified' in fields:
+            obd_ds['date_modified'] = fields['Date Modified']
 
         if 'Creator' in fields:
             obd_ds['creator'] = fields['Creator']
@@ -150,11 +167,15 @@ def convert(fields, filename):
     obd_res['url'] = 'http://obd.open.canada.ca/' + filename
 
     obd_res['language'] = []
-    if fields.get('Language'):
+    if 'Language' in fields:
         if fields['Language'][:3] == 'fra':
             obd_res['language'].append('fr')
         if fields['Language'][:3] == 'eng':
             obd_res['language'].append('en')
+        if len(obd_res['language']) == 0:
+            MissingRequiredFieldException("Missing valid value for required field Language")
+    else:
+        raise MissingRequiredFieldException("Missing required field Language")
 
     if not fields.get('Resource Type'):
         obd_res['resource_type'] = 'guide'
@@ -179,7 +200,11 @@ def main(file_list, dest_file):
         with open(json_filename, 'r') as json_filed:
             print json_filename
             fields = json.load(json_filed)
-            obd_ds = convert(fields, fields['GCfile'])
+            try:
+                obd_ds = convert(fields, fields['GCfile'])
+            except Exception as x:
+                stderr.write(json_filename + ' ' + x.message)
+                pass
             json_text = json.dumps(obd_ds)
         os.remove(json_filename)
         with open(dest_file, 'a') as output_file:
