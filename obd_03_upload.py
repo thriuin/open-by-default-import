@@ -162,6 +162,13 @@ def delete_ckan_record(package_id):
     remote_ckan_api = Config.get('ckan', 'remote_api_key')
     user_agent = Config.get('web', 'user_agent')
 
+    # Delete the local file if it exists
+
+    gcdocs_file = os.path.join(doc_intake_dir,
+                                     munge_filename(os.path.basename(package_record['resources'][0]['name'])))
+    if os.path.exists(gcdocs_file):
+        os.remove(gcdocs_file)
+
     with RemoteCKAN(remote_ckan_url, user_agent=user_agent, apikey=remote_ckan_api) as ckan_instance:
         try:
             delete_blob(ckan_container, 'resources/{0}/{1}'.format(package_record['resources'][0]['id'],
@@ -392,4 +399,13 @@ for ckan_input in jsonl_file_list:
     os.remove(ckan_input)
 
 os.rmdir(download_ckan_dir)
+# Get rid of any leftovers
+for doc in os.listdir(doc_intake_dir):
+    doc_fn = os.path.join(doc_intake_dir, doc)
+    try:
+        if os.path.isfile(doc_fn):
+            logger.info("Deleting file " + doc_fn)
+            os.remove(doc_fn)
+    except Exception as e:
+        logger.warn(e.message)
 exit(0)

@@ -1,4 +1,5 @@
 import ConfigParser
+import logging
 import os
 import simplejson as json
 import uuid
@@ -17,10 +18,33 @@ oc_organizations = {
     "Treasury Board of Canada Secretariat": '81765FCD-32B3-4708-A593-3AA00705E62B'
 }
 
+# Load Azure and file directory configuration information
+Config = ConfigParser.ConfigParser()
+Config.read('azure.ini')
+
+json_file_list = []
+file_source = Config.get('working', 'intake_directory')
+dest_dir = Config.get('working', 'ckanjson_directory')
+archive_dir = Config.get('working', 'archive_directory')
+file_output = datetime.now().strftime("ckan_obd_%Y-%m-%d_%H-%M-%S.jsonl")
+
+# Setup logging
+
+logger = logging.getLogger('base')
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+fh = logging.FileHandler(Config.get('working', 'error_logfile'))
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] obd_02 "%(message)s"')
+ch.setFormatter(formatter)
+fh.setFormatter(formatter)
+logger.addHandler(ch)
+logger.addHandler(fh)
+
 
 class MissingRequiredFieldException(Exception):
     def __init__(self, message):
-        super(MissingRequiredFieldException, self).__init__(message + '\n')
+        super(MissingRequiredFieldException, self).__init__(message)
 
 
 def load_oc_resource_format():
@@ -204,22 +228,13 @@ def main(file_list, dest_file):
                 obd_ds = convert(fields, fields['GCfile'])
             except Exception as x:
                 stderr.write(json_filename + ' ' + x.message)
+                logger.error(json_filename + ' ' + x.message)
                 pass
             json_text = json.dumps(obd_ds)
         os.remove(json_filename)
         with open(dest_file, 'a') as output_file:
             output_file.write(json_text + '\n')
 
-
-# Load Azure and file directory configuration information
-Config = ConfigParser.ConfigParser()
-Config.read('azure.ini')
-
-json_file_list = []
-file_source = Config.get('working', 'intake_directory')
-dest_dir = Config.get('working', 'ckanjson_directory')
-archive_dir = Config.get('working', 'archive_directory')
-file_output = datetime.now().strftime("ckan_obd_%Y-%m-%d_%H-%M-%S.jsonl")
 
 # Read an individual file or a directory of .json files
 # For this project, it will almost always be a directory
