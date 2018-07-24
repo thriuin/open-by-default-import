@@ -249,4 +249,7 @@ elif os.path.isdir(file_source):
 # Perform the conversion on one or more files
 jsonl_file = os.path.join(dest_dir, file_output)
 main(json_file_list, jsonl_file)
-copyfile(jsonl_file, os.path.join(archive_dir, file_output))
+if os.path.exists(jsonl_file):
+    copyfile(jsonl_file, os.path.join(archive_dir, file_output))
+else:
+    logger.info("No files to export")

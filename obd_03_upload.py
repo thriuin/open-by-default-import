@@ -294,7 +294,9 @@ for root, dirs, files in os.walk(ckanjson_dir):
     for json_file in files:
         if json_file.endswith(".jsonl"):
             jsonl_file_list.append((os.path.join(root, json_file)))
-assert len(jsonl_file_list) > 0, "Nothing to import - no files found."
+if len(jsonl_file_list) < 1:
+    logger.info("Nothing to import - no files found.")
+    exit(0)
 
 # Process all Json lines input files
 for ckan_input in jsonl_file_list:
