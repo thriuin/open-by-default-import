@@ -33,8 +33,9 @@ file_output = datetime.now().strftime("ckan_obd_%Y-%m-%d_%H-%M-%S.jsonl")
 logger = logging.getLogger('base')
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
-fh = logging.FileHandler(Config.get('working', 'error_logfile'))
+fh = logging.FileHandler(datetime.now().strftime(Config.get('working', 'error_logfile')))
 ch.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s [%(levelname)s] obd_02 "%(message)s"')
 ch.setFormatter(formatter)
 fh.setFormatter(formatter)
@@ -48,10 +49,10 @@ class MissingRequiredFieldException(Exception):
 
 
 def load_oc_resource_format():
-    '''
+    """
     Read in the CKAN Open Canada resource format identifiers
     :return:
-    '''
+    """
     with open(os.path.join('schemas', 'presets.yaml'), 'r') as preset_file:
         presets = yaml.load(preset_file)
         resource_formats = {}
@@ -78,12 +79,12 @@ oc_resource_formats, oc_resource_types, oc_audience_types = load_oc_resource_for
 
 
 def convert(fields, filename):
-    '''
+    """
     Convert the basic imported JSON document metadata to CKAN Package JSON
     :param fields: JSON file notation
     :param filename: CKAN JSON lines files to write to
     :return: CKAN package object
-    '''
+    """
 
     # Initialize the record
     obd_ds = {'collection': 'publication',
@@ -226,11 +227,10 @@ def main(file_list, dest_file):
             fields = json.load(json_filed)
             try:
                 obd_ds = convert(fields, fields['GCfile'])
+                json_text = json.dumps(obd_ds)
             except Exception as x:
-                stderr.write(json_filename + ' ' + x.message)
                 logger.error(json_filename + ' ' + x.message)
                 pass
-            json_text = json.dumps(obd_ds)
         os.remove(json_filename)
         with open(dest_file, 'a') as output_file:
             output_file.write(json_text + '\n')

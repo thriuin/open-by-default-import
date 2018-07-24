@@ -37,9 +37,13 @@ logger = logging.getLogger('base')
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
+fh = logging.FileHandler(datetime.now().strftime(Config.get('working', 'error_logfile')))
+ch.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s [%(levelname)s] obd3 "%(message)s"')
 ch.setFormatter(formatter)
+fh.setFormatter(formatter)
 logger.addHandler(ch)
+logger.addHandler(fh)
 
 
 def md5(file_to_hash):
@@ -164,8 +168,7 @@ def delete_ckan_record(package_id):
 
     # Delete the local file if it exists
 
-    gcdocs_file = os.path.join(doc_intake_dir,
-                                     munge_filename(os.path.basename(package_record['resources'][0]['name'])))
+    gcdocs_file = os.path.join(doc_intake_dir, munge_filename(os.path.basename(package_record['resources'][0]['name'])))
     if os.path.exists(gcdocs_file):
         os.remove(gcdocs_file)
 

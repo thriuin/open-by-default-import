@@ -2,6 +2,7 @@
 *.json
 *.jl
 *.ini
+*.log
 /JSON/
 /Examples/
 /.idea
