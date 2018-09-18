@@ -238,9 +238,12 @@ def main(file_list, dest_file):
             try:
                 obd_ds = convert(fields, fields['GCfile'])
                 json_text = json.dumps(obd_ds)
+            except MissingRequiredFieldException as m:
+                pass
             except Exception as x:
                 logger.error(json_filename + ' ' + x.message)
-                logger.error(json_filename + ' ' + traceback.format_exc())
+                logger.error(traceback.format_exc())
+                # Although one file may have failed, keep trying the rest
                 pass
         os.remove(json_filename)
         with open(dest_file, 'a') as output_file:

@@ -5,9 +5,9 @@ import logging
 import os
 import requests.exceptions
 import simplejson as json
+import traceback
 from azure.common import AzureMissingResourceHttpError
 from azure.storage.blob import BlockBlobService
-from azure.storage.blob.models import ResourceProperties
 from ckan.logic import NotFound
 from ckan.lib.munge import munge_filename
 from ckanapi import RemoteCKAN
@@ -15,7 +15,8 @@ from ckanapi.errors import CKANAPIError
 from datetime import datetime
 from dateutil import parser as dateparser
 from tempfile import mkdtemp
-
+# noinspection PyPackageRequirements
+from azure.storage.blob.models import ResourceProperties
 
 # Read configuration information and initialize
 
@@ -395,6 +396,7 @@ for ckan_input in jsonl_file_list:
                     os.remove(local_gcdocs_file)
             except Exception as x:
                 logger.error(x.message)
+                logger.error(traceback.format_exc())
 
     # Save a copy of the JSON line file for audit purposes
     todays_date = this_moment.strftime("%Y-%m-%d")
@@ -412,5 +414,6 @@ for doc in os.listdir(doc_intake_dir):
             logger.info("Deleting file " + doc_fn)
             os.remove(doc_fn)
     except Exception as e:
-        logger.warn(e.message)
+        logger.error(e.message)
+        logger.error(traceback.format_exc())
 exit(0)

@@ -2,13 +2,16 @@
 import ConfigParser
 import logging
 import requests.exceptions
-from azure.common import AzureMissingResourceHttpError
+import traceback
 from azure.storage.blob import BlockBlobService
-from azure.storage.blob.models import ResourceProperties
 from ckan.logic import NotFound
 from ckanapi import RemoteCKAN
 from datetime import datetime
 from dateutil import parser as dateparser
+# noinspection PyPackageRequirements
+from azure.common import AzureMissingResourceHttpError
+# noinspection PyUnresolvedReferences
+from azure.storage.blob.models import ResourceProperties
 
 
 # Read configuration information and initialize
@@ -126,3 +129,4 @@ with RemoteCKAN(obd_ckan_url, user_agent=obd_ua) as obd_ckan:
 
         except Exception as xx:
             logger.error(xx.message)
+            logger.error(traceback.format_exc())
