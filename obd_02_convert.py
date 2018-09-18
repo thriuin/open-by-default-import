@@ -2,6 +2,7 @@ import ConfigParser
 import logging
 import os
 import simplejson as json
+import traceback
 import uuid
 import yaml
 from ckan.lib.munge import munge_filename
@@ -192,12 +193,21 @@ def convert(fields, filename):
     obd_res['url'] = 'http://obd.open.canada.ca/' + filename
 
     obd_res['language'] = []
-    if 'Language' in fields:
+    if ('Language' in fields):
+        logger.info( "Lang: " + fields['Language'])
         if fields['Language'][:3] == 'fra':
             obd_res['language'].append('fr')
-        if fields['Language'][:3] == 'eng':
+        elif fields['Language'][:3] == 'eng':
             obd_res['language'].append('en')
-        if len(obd_res['language']) == 0:
+        elif len(obd_res['language']) == 0:
+            MissingRequiredFieldException("Missing valid value for required field Language")
+    elif ('Language/Langue' in fields):
+        logger.info( "Lang: " + fields['Language/Langue'])
+        if fields['Language/Langue'][:2] == 'Fr':
+            obd_res['language'].append('fr')
+        elif fields['Language/Langue'][:2] == 'En':
+            obd_res['language'].append('en')
+        else:
             MissingRequiredFieldException("Missing valid value for required field Language")
     else:
         raise MissingRequiredFieldException("Missing required field Language")
@@ -230,10 +240,12 @@ def main(file_list, dest_file):
                 json_text = json.dumps(obd_ds)
             except Exception as x:
                 logger.error(json_filename + ' ' + x.message)
+                logger.error(json_filename + ' ' + traceback.format_exc())
                 pass
         os.remove(json_filename)
         with open(dest_file, 'a') as output_file:
-            output_file.write(json_text + '\n')
+            if 'json_text' in globals() or 'json_text' in locals():
+                output_file.write(json_text + '\n')
 
 
 # Read an individual file or a directory of .json files
