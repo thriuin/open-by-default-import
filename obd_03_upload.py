@@ -79,7 +79,7 @@ def sha384(file_to_hash):
                 hash_sha.update(chunk)
         return hash_sha.hexdigest()
     else:
-        logger.warn("sha384() File not found: {0}".format(file_to_hash))
+        logger.debug("sha384() File not found: {0}".format(file_to_hash))
         return None
 
 
@@ -99,7 +99,7 @@ def get_ckan_record(record_id):
 
         except NotFound:
             # This is a new record!
-            logger.info('get_ckan_record(): Cannot find record {0}'.format(record_id))
+            logger.info('Record {0} does not exist'.format(record_id))
         except requests.exceptions.ConnectionError as ce:
             logger.error('get_ckan_record(): Fatal connection error {0}'.format(ce.message))
             exit(code=500)
@@ -125,7 +125,7 @@ def add_ckan_record(package_dict):
         try:
             new_package = ckan_instance.action.package_create(**package_dict)
         except Exception as ex:
-            logger.error("add_ckan_record(): {0}".format(ex.message))
+            logger.error("Unable to create new portal record: {0}".format(ex.message))
     return new_package
 
 
@@ -145,7 +145,7 @@ def update_ckan_record(package_dict):
         try:
             new_package = ckan_instance.action.package_patch(**package_dict)
         except Exception as ex:
-            logger.error("update_ckan_record(): {0}".format(ex.message))
+            logger.error("Unable to update existing portal record: {0}".format(ex.message))
     return new_package
 
 
@@ -159,7 +159,7 @@ def delete_ckan_record(package_id):
     # First, verify and get the resource ID
     package_record = get_ckan_record(package_id)
     if len(package_record) == 0:
-        logger.warn("delete_ckan_record(): cannot find record ID {0}".format(package_id))
+        logger.warn("Cannot find record {0} to delete".format(package_id))
         return
 
     # Get rid of the resource
@@ -181,7 +181,7 @@ def delete_ckan_record(package_id):
             ckan_instance.action.dataset_purge(id=package_record['id'])
             logger.info("Deleted expired CKAN record {0}".format(package_record['id']))
         except Exception as ex:
-            logger.error("delete_ckan_record(): {0}".format(ex.message))
+            logger.error("Unexpected error when deleting record {0}".format(ex.message))
 
 
 def update_resource(package_id, resource_file):
@@ -199,7 +199,7 @@ def update_resource(package_id, resource_file):
         try:
             package_record = ckan_instance.action.package_show(id=package_id)
         except NotFound as nf:
-            logger.error("update_resource(): {0}".format(nf.message))
+            logger.error("Unable to find record {0} to update".format(nf.message))
             return
 
         try:
@@ -207,16 +207,17 @@ def update_resource(package_id, resource_file):
                 ckan_instance.action.resource_create(package_id=package_id,
                                                      url='',
                                                      upload=open(resource_file, 'rb'))
-                logger.info("update_resource(): added resource to {0}".format(package_id))
+                logger.info("Added new resource to {0}".format(package_id))
             else:
 
                     ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
                                                         url='',
                                                         upload=open(resource_file, 'rb'))
         except CKANAPIError as ce:
-            logger.error("update_resource(): ".format(ce.message))
+            logger.error("Unexpected error when updating a record {0}: ".format(ce.message))
+            logger.error(traceback.format_exc())
 
-        logger.info("update_resource(): updated resource {0}".format(package_record['resources'][0]['id']))
+        logger.info("Updated resource {0}".format(package_record['resources'][0]['id']))
 
 
 def get_blob(container, blob_name, local_name):
@@ -231,10 +232,11 @@ def get_blob(container, blob_name, local_name):
     try:
         blob = block_blob_service.get_blob_to_path(container, blob_name, local_name)
     except AzureMissingResourceHttpError as amrh_ex:
-        logger.info('get_blob(): Cannot find blob: {0}'.format(obd_resource_name))
-        logger.error("get_blob(): ".format(amrh_ex.message))
+        logger.debug('No such Azure resource: {0}'.format(obd_resource_name))
+        logger.debug("get_blob(): ".format(amrh_ex.message))
     except Exception as ex:
-        logger.error("get_blob(): ".format(ex.message))
+        logger.error("Unexpected error when retrieving a resource from Azure: ".format(ex.message))
+        logger.debug("get_blob(): ".format(ex.message))
     return blob
 
 
@@ -253,7 +255,8 @@ def put_blob(container, blob_name, local_name):
         # Verify
         success = block_blob_service.exists(container, blob_name=blob_name)
     except Exception as ex:
-        logger.error("get_blob(): ".format(ex.message))
+        logger.error("Unexpected error when saving a resource to Azure: ".format(ex.message))
+        logger.debug("put_blob(): ".format(ex.message))
     return success
 
 
@@ -267,7 +270,8 @@ def delete_blob(container, blob_name):
     try:
         block_blob_service.delete_blob(container, blob_name)
     except Exception as ex:
-        logger.error("get_blob(): ".format(ex.message))
+        logger.error("Unexpected error when deleting a resource from Azure: ".format(ex.message))
+        logger.debug("delete_blob(): ".format(ex.message))
 
 
 def get_gcdoc_name_root(blob_name):
@@ -296,7 +300,7 @@ for root, dirs, files in os.walk(ckanjson_dir):
         if json_file.endswith(".jsonl"):
             jsonl_file_list.append((os.path.join(root, json_file)))
 if len(jsonl_file_list) < 1:
-    logger.info("Nothing to import - no files found.")
+    logger.debug("Nothing to import.")
     exit(0)
 
 # Process all Json lines input files
@@ -336,12 +340,13 @@ for ckan_input in jsonl_file_list:
 
                 if num_of_resources > 1:
                     print('More than one resource found for dataset: {0}'.format(ckan_record['id']))
-                    break
+                    continue
 
                 local_gcdocs_file = os.path.join(doc_intake_dir,
                                                  munge_filename(os.path.basename(ckan_record['resources'][0]['name'])))
                 # Set the file size in the CKAN record
-                ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
+                if os.path.exists(local_gcdocs_file):
+                    ckan_record['resources'][0]['size'] = str(os.path.getsize(local_gcdocs_file) / 1024)
 
                 # Check if the resource already exists or not. If it does, download a copy and compare with the
                 # currently uploaded file. If they are the same, no further action is required. If not, then update.
@@ -373,13 +378,13 @@ for ckan_input in jsonl_file_list:
                     if not gcdocs_sha:
                         logger.error('Unable to generate SHA 348 Hash for file {0}'.format(local_gcdocs_file))
                         # If this is happening, best to quit and investigate
-                        break
+                        continue
 
                     if ckan_sha == gcdocs_sha:
-                        logger.info("No file update required for {0}".format(obd_record['id']))
+                        logger.info("No update required for {0}".format(obd_record['id']))
 
                     else:
-                        logger.info("Updated file from GCDocs for {0}".format(obd_record['id']))
+                        logger.info("Update required for file {0}".format(obd_record['id']))
                         # Upload file
                         update_resource(obd_record['id'], local_gcdocs_file)
 
@@ -411,7 +416,7 @@ for doc in os.listdir(doc_intake_dir):
     doc_fn = os.path.join(doc_intake_dir, doc)
     try:
         if os.path.isfile(doc_fn):
-            logger.info("Deleting file " + doc_fn)
+            logger.debug("Deleting file " + doc_fn)
             os.remove(doc_fn)
     except Exception as e:
         logger.error(e.message)

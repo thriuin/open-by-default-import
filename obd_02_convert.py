@@ -194,23 +194,21 @@ def convert(fields, filename):
 
     obd_res['language'] = []
     if ('Language' in fields):
-        logger.info( "Lang: " + fields['Language'])
         if fields['Language'][:3] == 'fra':
             obd_res['language'].append('fr')
         elif fields['Language'][:3] == 'eng':
             obd_res['language'].append('en')
         elif len(obd_res['language']) == 0:
-            MissingRequiredFieldException("Missing valid value for required field Language")
+            raise MissingRequiredFieldException("Missing valid value for required field Language in {0}".format(filename))
     elif ('Language/Langue' in fields):
-        logger.info( "Lang: " + fields['Language/Langue'])
         if fields['Language/Langue'][:2] == 'Fr':
             obd_res['language'].append('fr')
         elif fields['Language/Langue'][:2] == 'En':
             obd_res['language'].append('en')
         else:
-            MissingRequiredFieldException("Missing valid value for required field Language")
+            raise MissingRequiredFieldException("Missing valid value for required field Language/Langue in {0}".format(filename))
     else:
-        raise MissingRequiredFieldException("Missing required field Language")
+        raise MissingRequiredFieldException("Missing required field Language or Language/Langue in {0}".format(filename))
 
     if not fields.get('Resource Type'):
         obd_res['resource_type'] = 'guide'
@@ -232,22 +230,26 @@ def main(file_list, dest_file):
     :type dest_file: str
     """
     for json_filename in file_list:
+        json_text = ''
         with open(json_filename, 'r') as json_filed:
             print json_filename
             fields = json.load(json_filed)
             try:
                 obd_ds = convert(fields, fields['GCfile'])
                 json_text = json.dumps(obd_ds)
-            except MissingRequiredFieldException as m:
-                pass
+            except MissingRequiredFieldException as mx:
+                logger.warn(mx.message)
+                json_text = ''
+                continue
             except Exception as x:
                 logger.error(json_filename + ' ' + x.message)
                 logger.error(traceback.format_exc())
                 # Although one file may have failed, keep trying the rest
-                pass
+                json_text = ''
+                continue
         os.remove(json_filename)
         with open(dest_file, 'a') as output_file:
-            if 'json_text' in globals() or 'json_text' in locals():
+            if len(json_text) > 0:
                 output_file.write(json_text + '\n')
 
 
@@ -264,7 +266,8 @@ elif os.path.isdir(file_source):
 # Perform the conversion on one or more files
 jsonl_file = os.path.join(dest_dir, file_output)
 main(json_file_list, jsonl_file)
+
 if os.path.exists(jsonl_file):
     copyfile(jsonl_file, os.path.join(archive_dir, file_output))
 else:
-    logger.info("No files to export")
+    logger.info("No files to export to Open by Default portal")
