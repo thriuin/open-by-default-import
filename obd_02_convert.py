@@ -89,7 +89,7 @@ def convert(fields, filename):
 
     # Initialize the record
     obd_ds = {'collection': 'publication',
-              'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'http://obd.open.canada.ca/' + os.path.splitext(filename)[0]))}
+              'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://obd.open.canada.ca/' + os.path.splitext(filename)[0]))}
 
     # Check Expiration date first. If the document has expired, then most of these fields will NOT be present
 
@@ -176,6 +176,11 @@ def convert(fields, filename):
         # The maintainer e-mail is not currently provided by OBD so it is set to
         # open-ouvert@tbs-sct.gc.ca
         obd_ds['maintainer_email'] = 'open-ouvert@tbs-sct.gc.ca'
+
+        logger.info('Processed incoming XML for document {0} / {1}-{2}'.format(
+            fields['GCfile'],
+            fields['Title English'] if 'Title English' in fields else '',
+            fields['Title French'] if 'Title French' in fields else ''))
 
     obd_res = {}
     res_name = munge_filename(os.path.basename(filename))

@@ -209,10 +209,9 @@ def update_resource(package_id, resource_file):
                                                      upload=open(resource_file, 'rb'))
                 logger.info("Added new resource to {0}".format(package_id))
             else:
-
-                    ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
-                                                        url='',
-                                                        upload=open(resource_file, 'rb'))
+                ckan_instance.action.resource_patch(id=package_record['resources'][0]['id'],
+                                                    url='',
+                                                    upload=open(resource_file, 'rb'))
         except CKANAPIError as ce:
             logger.error("Unexpected error when updating a record {0}: ".format(ce.message))
             logger.error(traceback.format_exc())

@@ -89,7 +89,7 @@ for blob in generator:
             basename = os.path.splitext(source_name)[0]
 
             with open(os.path.join(basedir, "{0}.json".format(basename)), 'w') as jsonfile:
-                print os.path.basename(blob.name)
+                logger.info('Downloading {0}'.format(os.path.basename(blob.name)))
                 local_file = os.path.join(archive_folder, munge_filename(os.path.basename(blob.name)))
                 assert isinstance(azure_gcdocs_container, str)
                 b = block_blob_service.get_blob_to_path(azure_gcdocs_container, blob.name, local_file)
