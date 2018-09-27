@@ -15,5 +15,6 @@ ipaddress>=1.0.19
 lxml>=4.2.0
 pycparser>=2.18
 simplejson
+termcolor>=1.1
 PyYAML>=3.12
 uuid>=1.30
