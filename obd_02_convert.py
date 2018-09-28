@@ -89,7 +89,7 @@ def convert(fields, filename):
 
     # Initialize the record
     obd_ds = {'collection': 'publication',
-              'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://obd.open.canada.ca/' + os.path.splitext(filename)[0]))}
+              'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'http://obd.open.canada.ca/' + os.path.splitext(filename)[0]))}
 
     # Check Expiration date first. If the document has expired, then most of these fields will NOT be present
 

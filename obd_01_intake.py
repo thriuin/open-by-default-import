@@ -76,12 +76,14 @@ block_blob_service = BlockBlobService(azure_account_name, azure_account_key)
 
 timestamp = datetime.utcnow()
 archive_folder = os.path.join(archive_directory, timestamp.strftime("%Y-%m-%d_%H-%M"))
-os.mkdir(archive_folder, 0o775)
 
 # Download XML files from Azure and convert to JSON format
 generator = block_blob_service.list_blobs(azure_gcdocs_container)
 basedir = Config.get('working', 'intake_directory')
 for blob in generator:
+    # Don't create an archive directory unless needed
+    if not os.path.exists(archive_folder):
+        os.mkdir(archive_folder, 0o775)
     try:
         # Convert XML files to a simpler JSON files
         if os.path.splitext(blob.name)[1] == '.xml':
@@ -116,3 +118,4 @@ for blob in generator:
 
     except Exception as x:
         logger.error(traceback.format_exc())
+
