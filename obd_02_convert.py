@@ -177,7 +177,7 @@ def convert(fields, filename):
         # open-ouvert@tbs-sct.gc.ca
         obd_ds['maintainer_email'] = 'open-ouvert@tbs-sct.gc.ca'
 
-        logger.info('Processed incoming XML for document {0} / {1}-{2}'.format(
+        logger.info('Processed incoming XML for document {0} / {1} {2}'.format(
             fields['GCfile'],
             fields['Title English'] if 'Title English' in fields else '',
             fields['Title French'] if 'Title French' in fields else ''))
@@ -197,23 +197,24 @@ def convert(fields, filename):
     # Placeholder - the file itself needs to be uploaded with the CKAN API
     obd_res['url'] = 'http://obd.open.canada.ca/' + filename
 
-    obd_res['language'] = []
-    if ('Language' in fields):
-        if fields['Language'][:3] == 'fra':
-            obd_res['language'].append('fr')
-        elif fields['Language'][:3] == 'eng':
-            obd_res['language'].append('en')
-        elif len(obd_res['language']) == 0:
-            raise MissingRequiredFieldException("Missing valid value for required field Language in {0}".format(filename))
-    elif ('Language/Langue' in fields):
-        if fields['Language/Langue'][:2] == 'Fr':
-            obd_res['language'].append('fr')
-        elif fields['Language/Langue'][:2] == 'En':
-            obd_res['language'].append('en')
+    if expiry_date > datetime.utcnow():
+        obd_res['language'] = []
+        if ('Language' in fields):
+            if fields['Language'][:3] == 'fra':
+                obd_res['language'].append('fr')
+            elif fields['Language'][:3] == 'eng':
+                obd_res['language'].append('en')
+            elif len(obd_res['language']) == 0:
+                raise MissingRequiredFieldException("Missing valid value for required field Language in {0}".format(filename))
+        elif ('Language/Langue' in fields):
+            if fields['Language/Langue'][:2] == 'Fr':
+                obd_res['language'].append('fr')
+            elif fields['Language/Langue'][:2] == 'En':
+                obd_res['language'].append('en')
+            else:
+                raise MissingRequiredFieldException("Missing valid value for required field Language/Langue in {0}".format(filename))
         else:
-            raise MissingRequiredFieldException("Missing valid value for required field Language/Langue in {0}".format(filename))
-    else:
-        raise MissingRequiredFieldException("Missing required field Language or Language/Langue in {0}".format(filename))
+            raise MissingRequiredFieldException("Missing required field Language or Language/Langue in {0}".format(filename))
 
     if not fields.get('Resource Type'):
         obd_res['resource_type'] = 'guide'
