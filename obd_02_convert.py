@@ -207,9 +207,9 @@ def convert(fields, filename):
             elif len(obd_res['language']) == 0:
                 raise MissingRequiredFieldException("Missing valid value for required field Language in {0}".format(filename))
         elif ('Language/Langue' in fields):
-            if fields['Language/Langue'][:2] == 'Fr':
+            if fields['Language/Langue'][:2].lower() == 'fr':
                 obd_res['language'].append('fr')
-            elif fields['Language/Langue'][:2] == 'En':
+            elif fields['Language/Langue'][:2].lower() == 'en':
                 obd_res['language'].append('en')
             else:
                 raise MissingRequiredFieldException("Missing valid value for required field Language/Langue in {0}".format(filename))
