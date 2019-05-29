@@ -177,10 +177,7 @@ def convert(fields, filename):
         # open-ouvert@tbs-sct.gc.ca
         obd_ds['maintainer_email'] = 'open-ouvert@tbs-sct.gc.ca'
 
-        logger.info('Processed incoming XML for document {0} / {1} {2}'.format(
-            fields['GCfile'],
-            fields['Title English'] if 'Title English' in fields else '',
-            fields['Title French'] if 'Title French' in fields else ''))
+        logger.info('Processed incoming XML for document {0}'.format(fields['GCfile']))
 
     obd_res = {}
     res_name = munge_filename(os.path.basename(filename))
